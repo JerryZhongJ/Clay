@@ -1,13 +1,13 @@
-# Conscious
+# Mind
 
 ## 概述
 
-AI 助手的意识与灵魂所在，负责产生想法和意图。目前基于 LLM 实现，称为 **LLM-based Conscious**。
+AI 助手的心智与思维所在，负责产生想法和意图。目前基于 LLM 实现，称为 **LLM-based Mind**。
 
 ## 核心职责
 
 - **产生想法**
-- **调用其他 Faculty 的功能**（所有 Faculty 都可以互相调用，但 Conscious 应该是最主要的调用者）
+- **调用其他 Faculty 的功能**（所有 Faculty 都可以互相调用，但 Mind 应该是最主要的调用者）
 
 ## 活动类型
 
@@ -17,7 +17,7 @@ AI 助手的意识与灵魂所在，负责产生想法和意图。目前基于 L
 
 ## 实现方式
 
-### LLM-based Conscious
+### LLM-based Mind
 
 LLM 的 context 除了注意域，还包含一段始终存在的"自我意识"或"自我存在"的 prompt，用于告诉 LLM：
 - "我是谁"
@@ -33,7 +33,7 @@ LLM 的 context 除了注意域，还包含一段始终存在的"自我意识"�
 
 ### 设计目标
 
-我希望 Conscious 的内容（即 LLM 的 prompt）是第一人称叙述，是它的内心世界。我不希望把 LLM 当作 Agent 的驾驶员去操纵一个 Agent 如何反应。换句话说，我想要的是类似于现在 LLM 的 thinking mode。
+我希望 Mind 的内容（即 LLM 的 prompt）是第一人称叙述，是它的内心世界。我不希望把 LLM 当作 Agent 的驾驶员去操纵一个 Agent 如何反应。换句话说，我想要的是类似于现在 LLM 的 thinking mode。
 
 ### 格式设计决策
 

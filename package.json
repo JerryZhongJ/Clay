@@ -1,0 +1,38 @@
+{
+  "name": "clay",
+  "version": "0.1.0",
+  "description": "具有自主性和持续存在感的 AI 助手",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "autonomous",
+    "typescript",
+    "event-driven"
+  ],
+  "author": "Jerry",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.19.23",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "winston": "^3.18.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
