@@ -26,7 +26,7 @@ export class CommonActivityFilter implements ActivityFilter {
       const facultyNames = Array.isArray(this.options.faculty_name)
         ? this.options.faculty_name
         : [this.options.faculty_name];
-      if (!facultyNames.includes(activity.faculty_name)) {
+      if (!facultyNames.includes(activity.role)) {
         return false;
       }
     }
@@ -79,7 +79,7 @@ export class FacultyNameFilter implements ActivityFilter {
 
   match(activity: Activity): boolean {
     const names = Array.isArray(this.facultyName) ? this.facultyName : [this.facultyName];
-    return names.includes(activity.faculty_name);
+    return names.includes(activity.role);
   }
 }
 

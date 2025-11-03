@@ -4,18 +4,15 @@
 
 import type { Logger } from 'winston';
 import { createLogger } from '../utils/logger';
-import { Activity, ActivityCondition } from './activity';
+import { Activity } from './activity';
 import { Faculty } from './faculty';
-import { ActivityFilter, ActivityHandler, Hub } from './hub';
+import { ActivityFilter, ActivityHandler, ActivityMask, Hub } from './hub';
+import { HubPortImpl } from './hub-port-impl';
 
 /**
  * 活动处理器注册项
  */
-interface HandlerRegistration {
-  filter?: ActivityFilter;
-  condition?: ActivityCondition;
-  handler: ActivityHandler;
-}
+
 
 /**
  * Hub 实现类
@@ -23,7 +20,11 @@ interface HandlerRegistration {
 export class HubImpl implements Hub {
   private faculties: Map<string, Faculty> = new Map();
   private running: boolean = false;
-  private handlerRegistrations: HandlerRegistration[] = [];
+  // private handlers: ActivityHandler[] = [];
+  private handlers_of_role: Map<string, Set<ActivityHandler>> = new Map();
+  private all_handlers: Set<ActivityHandler> = new Set();
+  // TODO: 按role管理注册
+  // TODO: 按具体的condition管理注册
   private logger: Logger;
 
   constructor(logger?: Logger) {
@@ -33,77 +34,74 @@ export class HubImpl implements Hub {
   /**
    * 注册 Faculty
    */
-  connectFaculty(faculty: Faculty): void {
-    if (this.faculties.has(faculty.name)) {
-      this.logger.warn(`Faculty ${faculty.name} 已经注册过了`);
+  connectFaculty(role:string, faculty: Faculty): void {
+    if (this.faculties.has(role)) {
+      this.logger.warn(`职位 ${role} 已经被占用了`);
       return;
     }
 
-    this.faculties.set(faculty.name, faculty);
+    this.faculties.set(role, faculty);
 
     // 注入 Hub 引用给 Faculty
-    faculty.setHub(this);
+    faculty.setHub(new HubPortImpl(role, this, faculty));
 
-    this.logger.info(`Faculty ${faculty.name} 已注册`);
+    this.logger.info(`Faculty ${role} 已注册`);
   }
 
   /**
    * 注销 Faculty
    */
-  disconnectFaculty(facultyName: string): void {
-    const faculty = this.faculties.get(facultyName);
+  disconnectFaculty(role: string): void {
+    const faculty = this.faculties.get(role);
     if (!faculty) {
-      this.logger.warn(`Faculty ${facultyName} 不存在`);
+      this.logger.warn(`Faculty ${role} 不存在`);
       return;
     }
 
     // 取消 Hub 引用
     faculty.unsetHub();
 
-    this.faculties.delete(facultyName);
+    this.faculties.delete(role);
 
     // 移除相关的活动处理器
-    this.handlerRegistrations = this.handlerRegistrations.filter(
-      reg => reg.handler.faculty.name !== facultyName
-    );
+    this.unregisterAllActivityHandler(role);
 
-    this.logger.info(`Faculty ${facultyName} 已注销`);
+    this.logger.info(`Faculty ${role} 已注销`);
   }
 
   /**
    * 注册活动处理器（支持 Filter 或 Condition）
    */
-  registerActivityHandler(filterOrCondition: ActivityFilter | ActivityCondition, handler: ActivityHandler): void {
-    // 判断是 Filter 还是 Condition
-    if (typeof (filterOrCondition) === 'function' ) {
-      // ActivityFilter 有 match 方法
-      this.handlerRegistrations.push({ filter: filterOrCondition, handler });
+  registerActivityHandler(handler: ActivityHandler): void {
+    let handlers: Set<ActivityHandler> = new Set();
+    if (!this.handlers_of_role.has(handler.role)) {
+      this.handlers_of_role.set(handler.role, handlers);
     } else {
-      // ActivityCondition 是简单对象
-      this.handlerRegistrations.push({ condition: filterOrCondition, handler });
+      handlers = this.handlers_of_role.get(handler.role)!;
     }
+    handlers.add(handler);
+    this.all_handlers.add(handler);
     this.logger.debug(`注册活动处理器: ${handler.description}`);
   }
 
   /**
    * 注销活动处理器
    */
-  unregisterActivityHandler(handlerOrFilter: ActivityHandler | ActivityFilter): void {
-    if ('handle' in handlerOrFilter) {
-      // 通过 handler 注销
-      const handler = handlerOrFilter as ActivityHandler;
-      this.handlerRegistrations = this.handlerRegistrations.filter(
-        reg => reg.handler !== handler
-      );
-      this.logger.debug(`注销活动处理器: ${handler.description}`);
-    } else {
-      // 通过 filter 注销
-      const filter = handlerOrFilter as ActivityFilter;
-      this.handlerRegistrations = this.handlerRegistrations.filter(
-        reg => reg.filter !== filter
-      );
-      this.logger.debug('通过 filter 注销活动处理器');
+  unregisterActivityHandler(handler: ActivityHandler): void {
+    this.handlers_of_role.get(handler.role)?.delete(handler);
+    this.all_handlers.delete(handler);
+    this.logger.debug(`注销活动处理器: ${handler.description}`);
+  }
+
+  unregisterAllActivityHandler(role: string): void {
+    const handlers = this.handlers_of_role.get(role);
+    if (handlers) {
+      handlers.forEach(handler => {
+        this.all_handlers.delete(handler);
+        this.logger.debug(`注销活动处理器: ${handler.description}`);
+      });
     }
+    this.handlers_of_role.delete(role);
   }
 
   /**
@@ -116,12 +114,12 @@ export class HubImpl implements Hub {
     }
 
     // 验证活动的 faculty_name 是否有效
-    if (!this.faculties.has(activity.faculty_name)) {
-      this.logger.warn(`活动来自未注册的 Faculty: ${activity.faculty_name}`);
+    if (!this.faculties.has(activity.role)) {
+      this.logger.warn(`活动来自未注册的 Faculty: ${activity.role}`);
     }
 
 
-    this.logger.debug(`活动已添加: ${activity.faculty_name}.${activity.verb}`);
+    this.logger.debug(`活动已添加: ${activity.role}.${activity.details.action}`);
 
     // 触发匹配的活动处理器
     this.triggerHandlers(activity);
@@ -133,30 +131,22 @@ export class HubImpl implements Hub {
    */
   private triggerHandlers(activity: Activity): Promise<void>[] {
     // 1. 先收集所有匹配的 handlers
-    const matchedHandlers: ActivityHandler[] = [];
+    const matchedHandlers: ActivityHandler[] = Array.from(this.all_handlers).filter(handler => {
+      let isMatch = false;
 
-    for (const registration of this.handlerRegistrations) {
-      try {
-        let isMatch = false;
-
-        if (registration.filter) {
-          // 使用 ActivityFilter 匹配
-          isMatch = registration.filter(activity);
-        } else if (registration.condition) {
-          // 使用 ActivityCondition 匹配
-          isMatch = this.matchCondition(activity, registration.condition);
-        }
-
-        if (isMatch) {
-          matchedHandlers.push(registration.handler);
-        }
-      } catch (error) {
-        this.logger.error(`处理器匹配异常: ${registration.handler.description}`, {
-          error: error instanceof Error ? error.message : String(error),
-          faculty: registration.handler.faculty.name
-        });
+      if (typeof handler.condition === 'function') {
+        // 使用 ActivityFilter 匹配
+        let filter = handler.condition as ActivityFilter;
+        isMatch = filter(activity);
+      } else {
+        // 使用 ActivityCondition 匹配
+        let condition = handler.condition as ActivityMask;
+        isMatch = this.matchCondition(activity, condition);
       }
-    }
+
+      return isMatch;
+    });
+
 
     // 2. 返回所有 handler 的 Promise
     return matchedHandlers.map(handler => {
@@ -165,8 +155,8 @@ export class HubImpl implements Hub {
       return handler.handle(activity).catch((error: any) => {
         this.logger.error(`处理器执行失败: ${handler.description}`, {
           error: error instanceof Error ? error.message : String(error),
-          faculty: handler.faculty.name,
-          activity: `${activity.faculty_name}.${activity.verb}`
+          handler: handler.description,
+          activity: `${activity.role}.${activity.details.action}`
         });
       });
     });
@@ -175,25 +165,15 @@ export class HubImpl implements Hub {
   /**
    * 根据 ActivityCondition 匹配活动
    */
-  private matchCondition(activity: Activity, condition: ActivityCondition): boolean {
-    // 匹配 facultyName
-    if (condition.facultyName !== undefined && activity.faculty_name !== condition.facultyName) {
+  private matchCondition(activity: Activity, condition: ActivityMask): boolean {
+    // 匹配 role
+    if (condition.role !== undefined && activity.role !== condition.role) {
       return false;
     }
 
     // 匹配 verb
-    if (condition.verb !== undefined && activity.verb !== condition.verb) {
+    if (condition.verb !== undefined && activity.details.action !== condition.verb) {
       return false;
-    }
-
-    // 匹配 tags
-    if (condition.tags !== undefined && condition.tags.size > 0) {
-      // 检查活动是否包含条件中的所有标记
-      for (const tag of condition.tags) {
-        if (!activity.tags.has(tag)) {
-          return false; 
-        }
-      }
     }
 
     return true;
@@ -235,3 +215,4 @@ export class HubImpl implements Hub {
   }
 
 }
+

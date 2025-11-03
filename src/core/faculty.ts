@@ -2,7 +2,7 @@
  * Faculty 基础接口定义
  */
 
-import { Hub } from "./hub";
+import { HubPort } from "./hub";
 
 
 
@@ -18,7 +18,7 @@ export interface Faculty {
   /**
    * 设置 Hub
    */
-  setHub(hub: Hub): void;
+  setHub(hubPort: HubPort): void;
 
   unsetHub(): void;
 
